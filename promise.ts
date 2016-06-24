@@ -26,18 +26,43 @@ THE SOFTWARE.
 
 ---------------------------------------------------------------------------*/
 
-/** resolver function */
 interface Reject       {  (reason: string | Error): void  }
 interface Resolve  <T> {  (value : T): void }
 interface Executor <T> {  (resolve: Resolve <T> , reject: Reject): void }
+interface Thenable <T> {
+  /**
+   * Appends fulfillment and rejection handlers to the promise, and returns a new 
+   * promise resolving to the return value of the called handler, or to its original 
+   * settled value if the promise was not handled (i.e. if the relevant handler 
+   * onFulfilled or onRejected is undefined).
+   * @param {(value: T) => U} A Function called when the Promise is fulfilled. 
+   *                          This function has one argument, the fulfillment 
+   *                          value.
+   * @param {(reason: any| Error) => void} A Function called when the Promise is rejected.
+   *                                          This function has one argument, the rejection 
+   *                                          reason.
+   * @returns {Thenable<T>}
+   */
+  then  <U> (onfulfilled: (value: T) => U | Thenable<U>, onrejected?: (reason: string | Error) => void): Thenable <U>
 
+  /**
+   * Appends a rejection handler callback to the promise, and returns a new promise 
+   * resolving to the return value of the callback if it is called, or to its original 
+   * fulfillment value if the promise is instead fulfilled.
+   * @param {(reason: any| Error) => void} A Function called when the Promise is rejected. 
+   *                                          This function has one argument, the rejection 
+   *                                          reason.
+   * @returns {Thenable<T>}
+   */
+  catch <U> (onrejected:  (reason: string | Error) => U | Thenable<U>): Thenable <U>
+}
 /** 
  * Promise: implementation of the ES6 promise. 
  * The Promise object is used for asynchronous computations. A Promise represents 
  * an operation that hasn't completed yet, but is expected in the future. 
  * https://developer.mozilla.org/en/docs/Web/JavaScript/Reference/Global_Objects/Promise
  */
-class Promise <T> {
+class Promise <T> implements Thenable<T> {
   private value_callbacks: {(value: T)              : void}[]
   private error_callbacks: {(reason: string | Error): void}[]
   public state: "pending" | "fulfilled" | "rejected";
@@ -47,7 +72,7 @@ class Promise <T> {
   /**
    * Returns the function that created an instance's prototype. This is the Promise function by default.
    * @param {Resolver<T>} the resolver function.
-   * @returns {Promise<T>}
+   * @returns {Thenable<T>}
    */
   constructor(private executor: Executor <T>) {
     this.value_callbacks = []
@@ -70,12 +95,12 @@ class Promise <T> {
    * @param {(value: T) => U} A Function called when the Promise is fulfilled. 
    *                          This function has one argument, the fulfillment 
    *                          value.
-   * @param {(reason: string| Error) => void} A Function called when the Promise is rejected.
+   * @param {(reason: any| Error) => void} A Function called when the Promise is rejected.
    *                                          This function has one argument, the rejection 
    *                                          reason.
-   * @returns {Promise<T>}
+   * @returns {Thenable<T>}
    */
-  public then <U> (onfulfilled: (value: T) => U | Promise<U>, onrejected?: (reason: string | Error) => void): Promise <U> {
+  public then <U> (onfulfilled: (value: T) => U | Thenable<U>, onrejected?: (reason: string | Error) => void): Thenable <U> {
     return new Promise <U> ((resolve, reject) => {
       switch(this.state) {
         case "rejected":
@@ -87,7 +112,7 @@ class Promise <T> {
             let result = onfulfilled(this.value)
             if(result instanceof Promise)
             result.then(resolve).catch(reject)
-            else resolve(result)
+            else resolve(<U>result)
           break;
         case "pending":
           this.error_callbacks.push(error => {
@@ -99,7 +124,7 @@ class Promise <T> {
             let result = onfulfilled(value)
             if(result instanceof Promise)
             result.then(resolve).catch(reject)
-            else resolve(result)
+            else resolve(<U>result)
           })
           break;
       }
@@ -111,12 +136,12 @@ class Promise <T> {
    * resolving to the return value of the callback if it is called, or to its original 
    * fulfillment value if the promise is instead fulfilled.
    * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/catch
-   * @param {(reason: string| Error) => void} A Function called when the Promise is rejected. 
+   * @param {(reason: any| Error) => void} A Function called when the Promise is rejected. 
    *                                          This function has one argument, the rejection 
    *                                          reason.
-   * @returns {Promise<T>}
+   * @returns {Thenable<T>}
    */
-  public catch <U> (onrejected: (reason: string | Error) => U | Promise<U>): Promise <U> {
+  public catch <U> (onrejected: (reason: string | Error) => U | Thenable<U>): Thenable <U> {
     return new Promise <U> ((resolve, reject) => {
       switch(this.state) {
         case "fulfilled": break;
@@ -124,20 +149,20 @@ class Promise <T> {
           let result = onrejected(this.error)
           if(result instanceof Promise)
           result.then(resolve).catch(reject)
-          else resolve(result)
+          else resolve(<U>result)
           break;
         case "pending":
           this.error_callbacks.push(error => {
             let result = onrejected(this.error)
             if(result instanceof Promise)
             result.then(resolve).catch(reject)
-            else resolve(result)
+            else resolve(<U>result)
           })
           break;
       }
     })
   }
-
+  
   /**
    * Returns a promise that either resolves when all of the promises in the iterable 
    * argument have resolved or rejects as soon as one of the promises in the iterable 
@@ -147,21 +172,21 @@ class Promise <T> {
    * that rejected. This method can be useful for aggregating results of multiple 
    * promises together.
    * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/all
-   * @param {Promise<T>[]} an array of promises.
-   * @returns {Promise<T[]>}
+   * @param {Thenable<T>[]} an array of promises.
+   * @returns {Thenable<T[]>}
    */
-  public static all <T> (promises: Promise <T> []): Promise <T[]> {
+  public static all <T> (thenables: Thenable <T> []): Thenable <T[]> {
     return new Promise <T[]> ((resolve, reject) => {
-      if (promises.length === 0) {
+      if (thenables.length === 0) {
         resolve([])
       } else {
-        var results   = new Array(promises.length)
+        var results   = new Array(thenables.length)
         var completed = 0;
-        promises.forEach((promise, index) => 
-          promise.then(value => {
+        thenables.forEach((thenable, index) => 
+          thenable.then(value => {
               results[index] = value
               completed     += 1
-              if (completed === promises.length) 
+              if (completed === thenables.length) 
               resolve(results)
             }).catch(reject))
       }
@@ -172,12 +197,12 @@ class Promise <T> {
    * Returns a promise that resolves or rejects as soon as one of the promises in the iterable 
    * resolves or rejects, with the value or reason from that promise.
    * https://developer.mozilla.org/en/docs/Web/JavaScript/Reference/Global_Objects/Promise
-   * @param {Promise<T>[]} an array of promises.
-   * @returns {Promise<T[]>}
+   * @param {Thenable<T>[]} an array of promises.
+   * @returns {Thenable<T[]>}
    */
-  public static race <T> (promises: Promise <T>[]): Promise <T> {
+  public static race <T> (thenables: Thenable <T>[]): Thenable <T> {
     return new Promise <T> ((resolve, reject) => {
-      promises.forEach((promise, index) => {
+      thenables.forEach((promise, index) => {
         promise.then(resolve).catch(reject)
       })
     })
@@ -192,23 +217,23 @@ class Promise <T> {
    * value as a promise.
    * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/resolve
    * @param {T} the value to resolve.
-   * @returns{Promise<T>}
+   * @returns{Thenable<T>}
    */
-  public static resolve <T> (value: T | Promise<T>): Promise <T> {
+  public static resolve <T> (value: T | Thenable<T>): Thenable <T> {
     return new Promise <T> ((resolve, reject) => {
       if(value instanceof Promise)
       value.then(resolve).catch(reject)
-      else resolve(value)
+      else resolve(<T>value)
     })
   }
   
   /**
    * Returns a Promise object that is rejected with the given reason.
    * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/reject
-   * @param {Error} Reason why this Promise rejected.
-   * @returns{Promise<T>}
+   * @param {string | Error} Reason why this Promise rejected.
+   * @returns{Thenable<T>}
    */
-  public static reject <T> (reason: string | Error): Promise <T> {
+  public static reject <T> (reason: string | Error): Thenable <T> {
     return new Promise <T> ((_, reject) => reject(reason))
   }
 

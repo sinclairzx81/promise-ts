@@ -35,7 +35,7 @@ var Promise = (function () {
     /**
      * Returns the function that created an instance's prototype. This is the Promise function by default.
      * @param {Resolver<T>} the resolver function.
-     * @returns {Promise<T>}
+     * @returns {Thenable<T>}
      */
     function Promise(executor) {
         var _this = this;
@@ -61,10 +61,10 @@ var Promise = (function () {
      * @param {(value: T) => U} A Function called when the Promise is fulfilled.
      *                          This function has one argument, the fulfillment
      *                          value.
-     * @param {(reason: string| Error) => void} A Function called when the Promise is rejected.
+     * @param {(reason: any| Error) => void} A Function called when the Promise is rejected.
      *                                          This function has one argument, the rejection
      *                                          reason.
-     * @returns {Promise<T>}
+     * @returns {Thenable<T>}
      */
     Promise.prototype.then = function (onfulfilled, onrejected) {
         var _this = this;
@@ -104,10 +104,10 @@ var Promise = (function () {
      * resolving to the return value of the callback if it is called, or to its original
      * fulfillment value if the promise is instead fulfilled.
      * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/catch
-     * @param {(reason: string| Error) => void} A Function called when the Promise is rejected.
+     * @param {(reason: any| Error) => void} A Function called when the Promise is rejected.
      *                                          This function has one argument, the rejection
      *                                          reason.
-     * @returns {Promise<T>}
+     * @returns {Thenable<T>}
      */
     Promise.prototype.catch = function (onrejected) {
         var _this = this;
@@ -142,22 +142,22 @@ var Promise = (function () {
      * that rejected. This method can be useful for aggregating results of multiple
      * promises together.
      * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/all
-     * @param {Promise<T>[]} an array of promises.
-     * @returns {Promise<T[]>}
+     * @param {Thenable<T>[]} an array of promises.
+     * @returns {Thenable<T[]>}
      */
-    Promise.all = function (promises) {
+    Promise.all = function (thenables) {
         return new Promise(function (resolve, reject) {
-            if (promises.length === 0) {
+            if (thenables.length === 0) {
                 resolve([]);
             }
             else {
-                var results = new Array(promises.length);
+                var results = new Array(thenables.length);
                 var completed = 0;
-                promises.forEach(function (promise, index) {
-                    return promise.then(function (value) {
+                thenables.forEach(function (thenable, index) {
+                    return thenable.then(function (value) {
                         results[index] = value;
                         completed += 1;
-                        if (completed === promises.length)
+                        if (completed === thenables.length)
                             resolve(results);
                     }).catch(reject);
                 });
@@ -168,12 +168,12 @@ var Promise = (function () {
      * Returns a promise that resolves or rejects as soon as one of the promises in the iterable
      * resolves or rejects, with the value or reason from that promise.
      * https://developer.mozilla.org/en/docs/Web/JavaScript/Reference/Global_Objects/Promise
-     * @param {Promise<T>[]} an array of promises.
-     * @returns {Promise<T[]>}
+     * @param {Thenable<T>[]} an array of promises.
+     * @returns {Thenable<T[]>}
      */
-    Promise.race = function (promises) {
+    Promise.race = function (thenables) {
         return new Promise(function (resolve, reject) {
-            promises.forEach(function (promise, index) {
+            thenables.forEach(function (promise, index) {
                 promise.then(resolve).catch(reject);
             });
         });
@@ -187,7 +187,7 @@ var Promise = (function () {
      * value as a promise.
      * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/resolve
      * @param {T} the value to resolve.
-     * @returns{Promise<T>}
+     * @returns{Thenable<T>}
      */
     Promise.resolve = function (value) {
         return new Promise(function (resolve, reject) {
@@ -200,8 +200,8 @@ var Promise = (function () {
     /**
      * Returns a Promise object that is rejected with the given reason.
      * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/reject
-     * @param {Error} Reason why this Promise rejected.
-     * @returns{Promise<T>}
+     * @param {string | Error} Reason why this Promise rejected.
+     * @returns{Thenable<T>}
      */
     Promise.reject = function (reason) {
         return new Promise(function (_, reject) { return reject(reason); });
